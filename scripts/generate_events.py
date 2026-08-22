@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Generate deterministic, date-partitioned event data for the dbt workshop.
 
-The output layout is compatible with a BigQuery external table using hive
-partitioning:
+The default output is a clean SCD2 recovery happy path: every instrument emits
+exactly one state event per day, so (instrument_id, dt) is unique. The output
+layout is compatible with a BigQuery external table using hive partitioning:
 
-    output/events/dt=2026-08-18/data.parquet
-    output/events/dt=2026-08-19/data.parquet
+    output/events/dt=YYYY-MM-DD/data.parquet
 
 Example:
 
@@ -32,6 +32,9 @@ INSTRUMENTS = (
     (1005, "ETF"),
 )
 EVENT_TYPES = ("TRADE", "QUOTE", "CORRECTION")
+DEFAULT_START_DATE = (date.today() - timedelta(days=10)).isoformat()
+DEFAULT_DAYS = 5
+DEFAULT_ROWS_PER_DAY = len(INSTRUMENTS)
 
 
 def parse_date(value: str) -> date:
@@ -47,8 +50,11 @@ def rows_for_day(day: date, rows_per_day: int, seed: int) -> list[dict[str, obje
     day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
     rows: list[dict[str, object]] = []
 
-    for sequence in range(1, rows_per_day + 1):
-        instrument_id, _instrument_type = randomizer.choice(INSTRUMENTS)
+    selected_instruments = randomizer.sample(INSTRUMENTS, rows_per_day)
+
+    for sequence, (instrument_id, _instrument_type) in enumerate(
+        selected_instruments, start=1
+    ):
         event_type = randomizer.choices(EVENT_TYPES, weights=(75, 20, 5), k=1)[0]
         updated_at = day_start + timedelta(
             seconds=randomizer.randrange(0, 24 * 60 * 60),
@@ -61,7 +67,6 @@ def rows_for_day(day: date, rows_per_day: int, seed: int) -> list[dict[str, obje
                 "event_type": event_type,
                 "value": round(randomizer.uniform(10, 500), 4),
                 "updated_at": updated_at,
-                "dt": day,
             }
         )
 
@@ -84,7 +89,6 @@ def write_partition(output_dir: Path, day: date, rows: list[dict[str, object]]) 
             pa.field("event_type", pa.string(), nullable=False),
             pa.field("value", pa.float64(), nullable=False),
             pa.field("updated_at", pa.timestamp("us", tz="UTC"), nullable=False),
-            pa.field("dt", pa.date32(), nullable=False),
         ]
     )
     partition_dir = output_dir / f"dt={day.isoformat()}"
@@ -107,14 +111,14 @@ def generate(
         ),
     ] = Path("data/events"),
     start_date: Annotated[
-        str, typer.Option(help="First partition date (default: 2026-08-18)")
-    ] = "2026-08-18",
+        str, typer.Option(help="First partition date in ISO YYYY-MM-DD format.")
+    ] = DEFAULT_START_DATE,
     days: Annotated[
-        int, typer.Option(help="Number of daily partitions to create (default: 3)")
-    ] = 3,
+        int, typer.Option(help="Number of daily partitions to create.")
+    ] = DEFAULT_DAYS,
     rows_per_day: Annotated[
-        int, typer.Option(help="Number of event rows per partition (default: 100)")
-    ] = 100,
+        int, typer.Option(help="Number of event rows per partition.")
+    ] = DEFAULT_ROWS_PER_DAY,
     seed: Annotated[
         int, typer.Option(help="Seed for deterministic output (default: 42)")
     ] = 42,
@@ -126,6 +130,11 @@ def generate(
         raise typer.BadParameter("Must be at least 1.", param_hint="--days")
     if rows_per_day < 1:
         raise typer.BadParameter("Must be at least 1.", param_hint="--rows-per-day")
+    if rows_per_day > len(INSTRUMENTS):
+        raise typer.BadParameter(
+            f"Must be at most {len(INSTRUMENTS)} for unique instrument/day pairs.",
+            param_hint="--rows-per-day",
+        )
 
     for offset in range(days):
         partition_date = partition_start + timedelta(days=offset)

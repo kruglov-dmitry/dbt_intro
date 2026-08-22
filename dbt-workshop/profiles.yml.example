@@ -1,0 +1,11 @@
+dbt_workshop:
+  target: workshop
+  outputs:
+    workshop:
+      type: bigquery
+      method: oauth
+      project: __GCP_PROJECT_ID__
+      dataset: __BQ_DATASET__
+      location: __BQ_LOCATION__
+      threads: 4
+      priority: interactive
