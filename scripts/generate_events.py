@@ -15,10 +15,14 @@ Example:
 
 from __future__ import annotations
 
-import argparse
 import random
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from typing import Annotated
+
+import typer
+
+app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 INSTRUMENTS = (
     (1001, "EQUITY"),
@@ -34,9 +38,7 @@ def parse_date(value: str) -> date:
     try:
         return date.fromisoformat(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError(
-            "Expected an ISO date, e.g. 2026-08-18"
-        ) from error
+        raise typer.BadParameter("Expected an ISO date, e.g. 2026-08-18") from error
 
 
 def rows_for_day(day: date, rows_per_day: int, seed: int) -> list[dict[str, object]]:
@@ -93,57 +95,47 @@ def write_partition(output_dir: Path, day: date, rows: list[dict[str, object]]) 
     return output_file
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("data/events"),
-        help=(
-            "Directory that will contain dt=YYYY-MM-DD partitions "
-            "(default: data/events)"
+@app.command()
+def generate(
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            help=(
+                "Directory that will contain dt=YYYY-MM-DD partitions "
+                "(default: data/events)"
+            )
         ),
-    )
-    parser.add_argument(
-        "--start-date",
-        type=parse_date,
-        default=date(2026, 8, 18),
-        help="First partition date (default: 2026-08-18)",
-    )
-    parser.add_argument(
-        "--days",
-        type=int,
-        default=3,
-        help="Number of daily partitions to create (default: 3)",
-    )
-    parser.add_argument(
-        "--rows-per-day",
-        type=int,
-        default=100,
-        help="Number of event rows per partition (default: 100)",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Seed for deterministic output (default: 42)",
-    )
-    arguments = parser.parse_args()
+    ] = Path("data/events"),
+    start_date: Annotated[
+        str, typer.Option(help="First partition date (default: 2026-08-18)")
+    ] = "2026-08-18",
+    days: Annotated[
+        int, typer.Option(help="Number of daily partitions to create (default: 3)")
+    ] = 3,
+    rows_per_day: Annotated[
+        int, typer.Option(help="Number of event rows per partition (default: 100)")
+    ] = 100,
+    seed: Annotated[
+        int, typer.Option(help="Seed for deterministic output (default: 42)")
+    ] = 42,
+) -> None:
+    """Generate deterministic, date-partitioned event Parquet files."""
+    partition_start = parse_date(start_date)
 
-    if arguments.days < 1:
-        parser.error("--days must be at least 1")
-    if arguments.rows_per_day < 1:
-        parser.error("--rows-per-day must be at least 1")
+    if days < 1:
+        raise typer.BadParameter("Must be at least 1.", param_hint="--days")
+    if rows_per_day < 1:
+        raise typer.BadParameter("Must be at least 1.", param_hint="--rows-per-day")
 
-    for offset in range(arguments.days):
-        partition_date = arguments.start_date + timedelta(days=offset)
+    for offset in range(days):
+        partition_date = partition_start + timedelta(days=offset)
         output_file = write_partition(
-            arguments.output_dir,
+            output_dir,
             partition_date,
-            rows_for_day(partition_date, arguments.rows_per_day, arguments.seed),
+            rows_for_day(partition_date, rows_per_day, seed),
         )
-        print(f"Wrote {arguments.rows_per_day} rows to {output_file}")
+        typer.echo(f"Wrote {rows_per_day} rows to {output_file}")
 
 
 if __name__ == "__main__":
-    main()
+    app()

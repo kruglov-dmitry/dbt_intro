@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pyarrow>=17,<23",
+    "typer>=0.12,<1",
 ]
 
 [dependency-groups]

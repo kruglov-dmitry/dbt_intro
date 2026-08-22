@@ -119,7 +119,7 @@ The `dbt-workshop` directory is a separately runnable participant starter
 project. Create its local BigQuery profile with:
 
 ```bash
-./scripts/bootstrap_dbt_project.sh \
+uv run python scripts/configure_dbt_profile.py \
   --project-id YOUR_GCP_PROJECT \
   --dataset workshop_your_name \
   --location EU
