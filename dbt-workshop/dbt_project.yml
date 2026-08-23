@@ -15,19 +15,19 @@ clean-targets:
 
 vars:
   # Set this once for the shared workshop GCS bucket, without the gs:// prefix.
-  raw_bucket: "REPLACE_ME"
+  raw_bucket: "dbt-demo-506313-bucket"
 
 models:
   dbt_workshop:
     bronze:
       +materialized: view
-      +schema: bronze
+      # +schema: bronze
     silver:
       +materialized: view
-      +schema: silver
+      # +schema: silver
     gold:
       +materialized: table
-      +schema: gold
+      # +schema: gold
 
 seeds:
   dbt_workshop:

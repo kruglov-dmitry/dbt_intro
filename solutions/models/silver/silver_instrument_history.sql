@@ -1,6 +1,5 @@
 {{
     config(
-        alias='instruments',
         materialized='incremental',
         incremental_strategy='merge',
         unique_key=['instrument_id', 'valid_from'],

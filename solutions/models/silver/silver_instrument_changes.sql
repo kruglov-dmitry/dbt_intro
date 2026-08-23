@@ -1,4 +1,4 @@
-{{ config(alias='instrument_changes', materialized='view', tags=['silver']) }}
+{{ config(materialized='view', tags=['silver']) }}
 
 WITH history_with_previous AS (
     SELECT

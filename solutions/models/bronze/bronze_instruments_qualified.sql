@@ -1,4 +1,4 @@
-{{ config(alias='instruments', materialized='view', tags=['bronze']) }}
+{{ config(materialized='view', tags=['bronze']) }}
 
 WITH parsed AS (
     SELECT
