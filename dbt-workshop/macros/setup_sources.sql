@@ -6,15 +6,15 @@
         {{ exceptions.raise_compiler_error("Set vars.raw_bucket in dbt_project.yml") }}
     {% endif %}
 
-    {% set s3_path = 'gs://' ~ raw_bucket ~ '/events' %}
+    {% set gcs_path = 'gs://' ~ raw_bucket ~ '/instrument_revisions' %}
 
-    {{ log("S3 prefix: " ~ s3_path, info=True) }}
+    {{ log("GCS prefix: " ~ gcs_path, info=True) }}
 
     {{
         create_external_table(
             dataset=target.dataset,
-            table_name='events_external',
-            s3_path=s3_path,
+            table_name='instrument_revisions_external',
+            gcs_path=gcs_path,
             partitions='dt DATE',
         )
     }}

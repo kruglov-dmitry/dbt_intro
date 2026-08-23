@@ -1,4 +1,4 @@
-{% macro create_external_table(dataset, table_name, s3_path, partitions) %}
+{% macro create_external_table(dataset, table_name, gcs_path, partitions) %}
 
 {% set dataset_sql %}
     create schema if not exists `{{ target.project }}.{{ dataset }}`
@@ -10,9 +10,9 @@
     {% if partitions %}
         with partition columns ( {{ partitions }} )
     {% endif %}
-    options ( format = 'PARQUET', uris = ['{{ s3_path }}/*']
+    options ( format = 'PARQUET', uris = ['{{ gcs_path }}/*']
     {% if partitions %}
-        , hive_partition_uri_prefix = '{{ s3_path }}'
+        , hive_partition_uri_prefix = '{{ gcs_path }}'
         , require_hive_partition_filter = false
     {% endif %} );
 {% endset %}

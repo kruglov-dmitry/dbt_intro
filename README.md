@@ -1,185 +1,60 @@
-gcloud auth login
+# dbt Core + BigQuery medallion workshop
 
-======== slop below
-# dbt workshop data
+This repository provides deterministic Parquet fixtures and a dbt starter project
+for a Bronze → Silver → Gold workshop. The shared infrastructure is assumed to
+exist already.
 
-This project generates deterministic, Hive-partitioned Parquet event data for
-the dbt Core and BigQuery workshop. The output is intended for upload to GCS
-and querying through a BigQuery external table.
-
-## Prerequisites
-
-- Python 3.10 or later
-- [uv](https://docs.astral.sh/uv/)
-- `make`
-
-For the optional upload step, install and authenticate the Google Cloud CLI:
-
-```bash
-gcloud auth login
-gcloud auth application-default login
+```text
+Hive-partitioned Parquet → BigQuery external table → Bronze view
+  → Silver incremental SCD2 history + change view → Gold current-instruments table
 ```
 
-## Install dependencies
+## Generate source fixtures
 
-From the repository root, create the local environment and install the locked
-runtime and development dependencies:
+Install the local generator dependencies, then create five dated revision batches:
 
 ```bash
 make install
+make generate START_DATE=2026-08-13
 ```
 
-This installs `pyarrow` for Parquet generation and Ruff for formatting and
-linting. The local `.venv` directory is ignored by Git.
-
-## Generate the default workshop dataset
-
-```bash
-make generate
-```
-
-The default command creates five daily partitions starting ten days before the
-run date. Each contains one event for each of the five instruments:
+The output layout is compatible with BigQuery Hive partitioning:
 
 ```text
-data/events/
-├── dt=YYYY-MM-DD/data.parquet
-├── dt=YYYY-MM-DD/data.parquet
-├── dt=YYYY-MM-DD/data.parquet
-├── dt=YYYY-MM-DD/data.parquet
+data/instrument_revisions/
 └── dt=YYYY-MM-DD/data.parquet
 ```
 
-Every partition contains these columns:
+The Parquet payload uses BigQuery-compatible camelCase fields, but intentionally
+stores identifiers and timestamps as strings. It includes unchanged revisions,
+changed attributes, and one malformed record. Bronze normalizes the valid values
+and retains the malformed record in a rejection view.
 
-| Column | Parquet type | Description |
-|---|---|---|
-| `event_id` | string | Stable event identifier: `evt-YYYYMMDD-NNNNN`. |
-| `instrument_id` | int64 | Identifier from the small, fixed instrument set. |
-| `event_type` | string | One of `TRADE`, `QUOTE`, or `CORRECTION`. |
-| `value` | float64 | Deterministic pseudo-random event value. |
-| `updated_at` | UTC timestamp | Timestamp within the partition date. |
-| `dt` | date | Hive partition column supplied by BigQuery from the `dt=YYYY-MM-DD` directory. It is not duplicated in the Parquet payload. |
-
-## Customise a generation run
-
-Pass Make variables to override the defaults:
-
-```bash
-make generate START_DATE=2026-09-01 DAYS=5 ROWS_PER_DAY=5 SEED=7
-```
-
-Available variables:
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `OUTPUT_DIR` | `data/events` | Parent directory for the `dt=YYYY-MM-DD` partitions. |
-| `START_DATE` | 10 days before the run date | First partition date, in ISO `YYYY-MM-DD` format. |
-| `DAYS` | `5` | Number of daily partitions to create. |
-| `ROWS_PER_DAY` | `5` | Number of events in each partition; maximum five to preserve unique `(instrument_id, dt)` pairs. |
-| `SEED` | `42` | Random seed used to make output reproducible. |
-
-For example, write data outside the repository:
-
-```bash
-make generate OUTPUT_DIR=/tmp/workshop-events DAYS=2 ROWS_PER_DAY=5
-```
-
-The same `START_DATE`, `DAYS`, `ROWS_PER_DAY`, and `SEED` always produce the
-same rows. The default happy path has no null fields or duplicate `event_id` or
-`(instrument_id, dt)` pairs. Re-running with the same output directory
-overwrites each generated `data.parquet` file for those dates.
-
-Inspect a generated file's physical Parquet schema and sample rows with:
+Inspect a local fixture with:
 
 ```bash
 uv run python scripts/inspect_parquet.py \
-  data/events/dt=YYYY-MM-DD/data.parquet \
-  --limit 5
+  data/instrument_revisions/dt=2026-08-13/data.parquet
 ```
 
-The inspector reads the file directly. As a result, `dt` is intentionally not
-shown in this schema; BigQuery derives it from the Hive directory path.
-
-## Upload to GCS
-
-After generation, copy the **contents** of the event directory to the intended
-bucket prefix. This preserves the Hive-style `dt=...` directories:
+Upload the *contents* of the generated directory to the already-provisioned
+bucket prefix:
 
 ```bash
-gcloud storage cp --recursive data/events gs://dbt-workshop-data/events
+gcloud storage cp --recursive \
+  data/instrument_revisions \
+  gs://YOUR_WORKSHOP_DATA_BUCKET/instrument_revisions
 ```
 
-The resulting object paths are:
+## Run the participant dbt project
 
-```text
-gs://dbt-workshop-data/events/dt=YYYY-MM-DD/data.parquet
-```
+See [the participant instructions](dbt-workshop/README.md). In short: configure
+the profile and `raw_bucket` variable, create the external table, load the seed,
+and run `dbt build`.
 
-## Developer commands
+## Local checks
 
 ```bash
-make help    # list all targets
-make format  # apply Ruff formatting
-make lint    # run Ruff lint checks
-make check   # verify formatting and linting without changes
-make clean   # remove data/events (or OUTPUT_DIR if supplied)
+make format
+make check
 ```
-
-Run `make check` before committing changes to the generator.
-
-## Bootstrap shared GCP resources
-
-The shared-resource bootstrap enables the BigQuery and Cloud Storage APIs,
-creates the workshop bucket with uniform bucket-level access when needed,
-generates the Parquet event partitions, and uploads them to GCS.
-
-```bash
-export PROJECT_ID="your-dbt-workshop-project"
-export REGION="europe-west3"
-export BUCKET="${PROJECT_ID}-data"
-
-uv run python scripts/bootstrap_shared_resources.py
-```
-
-The default upload layout is:
-
-```text
-gs://YOUR_BUCKET/events/dt=YYYY-MM-DD/data.parquet
-```
-
-The command performs GCP writes. Confirm the active account and project before
-running it:
-
-```bash
-gcloud auth list
-gcloud config get-value project
-```
-
-Customise the generated data with the same options as the standalone generator:
-
-```bash
-uv run python scripts/bootstrap_shared_resources.py \
-  --project-id "$PROJECT_ID" \
-  --days 5 \
-  --rows-per-day 5 \
-  --start-date 2026-09-01
-```
-
-## dbt participant project
-
-The `dbt-workshop` directory is a separately runnable participant starter
-project. Create its local BigQuery profile with:
-
-```bash
-uv run python scripts/configure_dbt_profile.py \
-  --project-id YOUR_GCP_PROJECT \
-  --dataset workshop_your_name \
-  --location EU
-```
-
-Then use `dbt run-operation setup_sources --profiles-dir .` from the
-participant project. It provisions the configured target dataset if needed and
-creates its external table over the shared GCS data. See
-[dbt-workshop/README.md](dbt-workshop/README.md) for the complete dbt command
-sequence and exercise flow.

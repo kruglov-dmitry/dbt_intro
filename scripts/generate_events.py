@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
-"""Generate deterministic, date-partitioned event data for the dbt workshop.
+"""Generate deterministic, Hive-partitioned instrument revision Parquet data.
 
-The default output is a clean SCD2 recovery happy path: every instrument emits
-exactly one state event per day, so (instrument_id, dt) is unique. The output
-layout is compatible with a BigQuery external table using hive partitioning:
+The payload intentionally uses BigQuery-compatible camelCase field names and
+stores business values as strings. dbt Bronze models rename and type this data.
+The layout is compatible with a BigQuery external table using Hive partitioning:
 
-    output/events/dt=YYYY-MM-DD/data.parquet
-
-Example:
-
-    python scripts/generate_events.py --output-dir data/events
-    gsutil -m cp -r data/events gs://dbt-workshop-data/
+    output/instrument_revisions/dt=YYYY-MM-DD/data.parquet
 """
 
 from __future__ import annotations
 
-import random
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
@@ -25,13 +19,12 @@ import typer
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 INSTRUMENTS = (
-    (1001, "EQUITY"),
-    (1002, "BOND"),
-    (1003, "ETF"),
-    (1004, "EQUITY"),
-    (1005, "ETF"),
+    (1001, "Acme Corporation", "USD", "XNAS"),
+    (1002, "Northwind Government Bond", "EUR", "XPAR"),
+    (1003, "Global Technology ETF", "USD", "XNYS"),
+    (1004, "Contoso Manufacturing", "EUR", "XETR"),
+    (1005, "Fabrikam Dividend ETF", "GBP", "XLON"),
 )
-EVENT_TYPES = ("TRADE", "QUOTE", "CORRECTION")
 DEFAULT_START_DATE = (date.today() - timedelta(days=10)).isoformat()
 DEFAULT_DAYS = 5
 DEFAULT_ROWS_PER_DAY = len(INSTRUMENTS)
@@ -44,36 +37,62 @@ def parse_date(value: str) -> date:
         raise typer.BadParameter("Expected an ISO date, e.g. 2026-08-18") from error
 
 
-def rows_for_day(day: date, rows_per_day: int, seed: int) -> list[dict[str, object]]:
-    """Create a stable yet varied set of events for one date partition."""
-    randomizer = random.Random(f"{seed}:{day.isoformat()}")
-    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    rows: list[dict[str, object]] = []
+def state_for_revision(
+    instrument_id: int, name: str, currency: str, exchange: str, offset: int
+) -> tuple[str, str, str]:
+    """Return deterministic SCD changes while leaving other revisions unchanged."""
+    if instrument_id == 1001 and offset >= 1:
+        return "Acme Holdings", currency, exchange
+    if instrument_id == 1002 and offset >= 2:
+        return "Northwind Global Bond", "USD", "XNYS"
+    if instrument_id == 1004 and offset >= 3:
+        return name, currency, "XLON"
+    if instrument_id == 1003 and offset >= 4:
+        return "Global Innovation ETF", currency, exchange
+    return name, currency, exchange
 
-    selected_instruments = randomizer.sample(INSTRUMENTS, rows_per_day)
 
-    for sequence, (instrument_id, _instrument_type) in enumerate(
-        selected_instruments, start=1
-    ):
-        event_type = randomizer.choices(EVENT_TYPES, weights=(75, 20, 5), k=1)[0]
-        updated_at = day_start + timedelta(
-            seconds=randomizer.randrange(0, 24 * 60 * 60),
-            microseconds=randomizer.randrange(0, 1_000_000),
+def rows_for_day(day: date, rows_per_day: int, offset: int) -> list[dict[str, str]]:
+    """Create an upstream-style instrument revision batch for one partition."""
+    day_start = datetime.combine(day, time(hour=10), tzinfo=timezone.utc)
+    rows: list[dict[str, str]] = []
+
+    for instrument_id, name, currency, exchange in INSTRUMENTS[:rows_per_day]:
+        instrument_name, currency_code, exchange_code = state_for_revision(
+            instrument_id, name, currency, exchange, offset
         )
+        effective_at = day_start + timedelta(minutes=instrument_id % 10)
         rows.append(
             {
-                "event_id": f"evt-{day:%Y%m%d}-{sequence:05d}",
-                "instrument_id": instrument_id,
-                "event_type": event_type,
-                "value": round(randomizer.uniform(10, 500), 4),
-                "updated_at": updated_at,
+                "instrumentId": f" {instrument_id} ",
+                "instrumentName": f" {instrument_name} ",
+                "currencyCode": currency_code.lower(),
+                "exchangeCode": exchange_code.lower(),
+                "effectiveAt": effective_at.isoformat().replace("+00:00", "Z"),
+                "revisionId": str(int(day.strftime("%Y%m%d"))),
+                "sourceUpdatedAt": (effective_at + timedelta(minutes=5))
+                .isoformat()
+                .replace("+00:00", "Z"),
+            }
+        )
+
+    if offset == 2:
+        rows.append(
+            {
+                "instrumentId": "not-an-integer",
+                "instrumentName": "Malformed input",
+                "currencyCode": "usd",
+                "exchangeCode": "xnas",
+                "effectiveAt": "not-a-timestamp",
+                "revisionId": "not-a-revision",
+                "sourceUpdatedAt": day_start.isoformat().replace("+00:00", "Z"),
             }
         )
 
     return rows
 
 
-def write_partition(output_dir: Path, day: date, rows: list[dict[str, object]]) -> Path:
+def write_partition(output_dir: Path, day: date, rows: list[dict[str, str]]) -> Path:
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -84,11 +103,13 @@ def write_partition(output_dir: Path, day: date, rows: list[dict[str, object]]) 
 
     schema = pa.schema(
         [
-            pa.field("event_id", pa.string(), nullable=False),
-            pa.field("instrument_id", pa.int64(), nullable=False),
-            pa.field("event_type", pa.string(), nullable=False),
-            pa.field("value", pa.float64(), nullable=False),
-            pa.field("updated_at", pa.timestamp("us", tz="UTC"), nullable=False),
+            pa.field("instrumentId", pa.string(), nullable=False),
+            pa.field("instrumentName", pa.string(), nullable=False),
+            pa.field("currencyCode", pa.string(), nullable=False),
+            pa.field("exchangeCode", pa.string(), nullable=False),
+            pa.field("effectiveAt", pa.string(), nullable=False),
+            pa.field("revisionId", pa.string(), nullable=False),
+            pa.field("sourceUpdatedAt", pa.string(), nullable=False),
         ]
     )
     partition_dir = output_dir / f"dt={day.isoformat()}"
@@ -106,24 +127,25 @@ def generate(
         typer.Option(
             help=(
                 "Directory that will contain dt=YYYY-MM-DD partitions "
-                "(default: data/events)"
+                "(default: data/instrument_revisions)"
             )
         ),
-    ] = Path("data/events"),
+    ] = Path("data/instrument_revisions"),
     start_date: Annotated[
         str, typer.Option(help="First partition date in ISO YYYY-MM-DD format.")
     ] = DEFAULT_START_DATE,
     days: Annotated[
-        int, typer.Option(help="Number of daily partitions to create.")
+        int, typer.Option(help="Number of daily revision batches to create.")
     ] = DEFAULT_DAYS,
     rows_per_day: Annotated[
-        int, typer.Option(help="Number of event rows per partition.")
+        int, typer.Option(help="Number of valid instrument revisions per batch.")
     ] = DEFAULT_ROWS_PER_DAY,
     seed: Annotated[
-        int, typer.Option(help="Seed for deterministic output (default: 42)")
+        int,
+        typer.Option(help="Retained for CLI compatibility; fixture values are fixed."),
     ] = 42,
 ) -> None:
-    """Generate deterministic, date-partitioned event Parquet files."""
+    """Generate deterministic instrument revision Parquet files."""
     partition_start = parse_date(start_date)
 
     if days < 1:
@@ -132,18 +154,17 @@ def generate(
         raise typer.BadParameter("Must be at least 1.", param_hint="--rows-per-day")
     if rows_per_day > len(INSTRUMENTS):
         raise typer.BadParameter(
-            f"Must be at most {len(INSTRUMENTS)} for unique instrument/day pairs.",
+            "Must be at most "
+            f"{len(INSTRUMENTS)} for one revision per instrument/batch.",
             param_hint="--rows-per-day",
         )
+    del seed
 
     for offset in range(days):
         partition_date = partition_start + timedelta(days=offset)
-        output_file = write_partition(
-            output_dir,
-            partition_date,
-            rows_for_day(partition_date, rows_per_day, seed),
-        )
-        typer.echo(f"Wrote {rows_per_day} rows to {output_file}")
+        rows = rows_for_day(partition_date, rows_per_day, offset)
+        output_file = write_partition(output_dir, partition_date, rows)
+        typer.echo(f"Wrote {len(rows)} rows to {output_file}")
 
 
 if __name__ == "__main__":

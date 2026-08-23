@@ -1,7 +1,7 @@
 [project]
-name = "dbt-workshop-data"
+name = "dbt-intro"
 version = "0.1.0"
-description = "Deterministic data generation for the dbt Core and BigQuery workshop"
+description = "Dummy data generator for the dbt Core workshop"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

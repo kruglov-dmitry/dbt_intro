@@ -2,7 +2,7 @@
 
 PYTHON ?= python3
 UV ?= uv
-OUTPUT_DIR ?= data/events
+OUTPUT_DIR ?= data/instrument_revisions
 START_DATE ?=
 DAYS ?= 5
 ROWS_PER_DAY ?= 5
@@ -16,7 +16,7 @@ help: ## Show available commands.
 install: ## Create/update the environment with runtime and development dependencies.
 	$(UV) sync --all-groups
 
-generate: ## Create Hive-style Parquet partitions; override variables such as DAYS=5.
+generate: ## Create Hive-style instrument-revision Parquet partitions.
 	$(UV) run python scripts/generate_events.py --output-dir $(OUTPUT_DIR) $(if $(START_DATE),--start-date $(START_DATE)) --days $(DAYS) --rows-per-day $(ROWS_PER_DAY) --seed $(SEED)
 
 format: ## Format Python and TOML files with Ruff.
@@ -26,5 +26,7 @@ lint: ## Verify formatting and linting without changing files.
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-clean: ## Remove locally generated event partitions.
+check: lint ## Run all local verification checks.
+
+clean: ## Remove locally generated instrument-revision partitions.
 	rm -rf $(OUTPUT_DIR)
