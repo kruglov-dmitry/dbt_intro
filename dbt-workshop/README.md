@@ -1,4 +1,9 @@
-# Participant dbt project
+# Tldr;
+
+Dbt-intro:
+- external table
+- medallion architecture
+- dbt core concepts: macros, seed, models, data contract, incremental SCD2
 
 This project builds a contracted medallion pipeline over shared Parquet
 instrument revisions. Each participant creates only an external-table definition
@@ -14,11 +19,18 @@ pip install -r requirements.txt
 cp profiles.yml.example profiles.yml
 ```
 
-Edit `profiles.yml` with your GCP project, workshop dataset, and location. In
+Edit `profiles.yml`
+```bash
+project: __GCP_PROJECT_ID__
+dataset: __BQ_DATASET__
+location: __BQ_LOCATION__
+```
+
+In
 `dbt_project.yml`, set `vars.raw_bucket` to the existing shared GCS bucket name,
 without `gs://`.
 
-Check the connection and create the participant-local external table:
+
 
 ```bash
 dbt debug
@@ -31,12 +43,13 @@ The macro creates `instrument_revisions_external` over:
 gs://<raw_bucket>/instrument_revisions/dt=YYYY-MM-DD/data.parquet
 ```
 
-## Build the medallion pipeline
+## Create a static table with csv content
 
 ```bash
 dbt seed
-dbt build
 ```
+
+## Task is to build full bronze/golden/layer views/table
 
 The resulting lineage is:
 
