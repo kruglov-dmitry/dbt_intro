@@ -46,6 +46,11 @@ gs://<raw_bucket>/instrument_revisions/dt=YYYY-MM-DD/data.parquet
 ## Create a static table with csv content
 
 ```bash
+dbt select --select bronze_instruments_qualified
+dbt build --select bronze_instruments_qualified
+dbt select --select bronze_instruments_quarantine
+dbt build --select bronze_instruments_quarantine
+
 dbt seed
 ```
 
