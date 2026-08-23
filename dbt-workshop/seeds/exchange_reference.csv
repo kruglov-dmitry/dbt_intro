@@ -1,0 +1,6 @@
+exchange_code,market_region,trading_calendar
+XNAS,US,NASDAQ
+XNYS,US,NYSE
+XPAR,EU,EURONEXT_PARIS
+XETR,EU,XETRA
+XLON,UK,LSE
