@@ -1,0 +1,184 @@
+version: 2
+
+seeds:
+  - name: exchanges
+    description: Exchange code mapping to market region and trading calendar
+    columns:
+      - name: exchange_code
+        data_tests: [not_null, unique]
+      - name: market_region
+        data_tests: [not_null]
+      - name: trading_calendar
+        data_tests: [not_null]
+
+models:
+  - name: bronze_instruments_qualified
+    description: >
+      Sanitizes camelCase and type cast numeric fields.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: instrument_id
+        data_type: int64
+        data_tests: [not_null]
+      - name: instrument_name
+        data_type: string
+        data_tests: [not_null]
+      - name: currency_code
+        data_type: string
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["USD", "EUR", "GBP"]
+      - name: exchange_code
+        data_type: string
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["XNAS", "XNYS", "XPAR", "XETR", "XLON"]
+      - name: effective_at
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: source_updated_at
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: load_date
+        data_type: date
+        data_tests: [not_null]
+
+  - name: bronze_instruments_quarantine
+    description: Faulty raws that doesn't meet Bronze layer data contract.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: raw_instrument_id
+        data_type: string
+      - name: raw_instrument_name
+        data_type: string
+      - name: raw_currency_code
+        data_type: string
+      - name: raw_exchange_code
+        data_type: string
+      - name: raw_effective_at
+        data_type: string
+      - name: raw_source_updated_at
+        data_type: string
+      - name: load_date
+        data_type: date
+      - name: rejection_reason
+        data_type: string
+        data_tests: [not_null]
+
+  - name: silver_instrument_history
+    description: Incremental SCD2 history around instrument_id derived from valid Bronze records.
+    config:
+      contract:
+        enforced: true
+      on_schema_change: fail
+    columns:
+      - name: instrument_id
+        data_type: int64
+        data_tests: [not_null]
+      - name: instrument_name
+        data_type: string
+        data_tests: [not_null]
+      - name: currency_code
+        data_type: string
+        data_tests: [not_null]
+      - name: exchange_code
+        data_type: string
+        data_tests: [not_null]
+      - name: content_hash
+        data_type: string
+        data_tests: [not_null]
+      - name: scd_version
+        data_type: int64
+        data_tests: [not_null]
+      - name: valid_from
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: valid_to
+        data_type: timestamp
+      - name: is_current
+        data_type: boolean
+        data_tests: [not_null]
+      - name: source_updated_at
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: load_date
+        data_type: date
+        data_tests: [not_null]
+
+  - name: silver_instrument_changes
+    description: Consumer-facing before-and-after diffs for every changed SCD2 version.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: instrument_id
+        data_type: int64
+        data_tests: [not_null]
+      - name: previous_scd_version
+        data_type: int64
+        data_tests: [not_null]
+      - name: scd_version
+        data_type: int64
+        data_tests: [not_null]
+      - name: changed_at
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: previous_instrument_name
+        data_type: string
+      - name: instrument_name
+        data_type: string
+        data_tests: [not_null]
+      - name: previous_currency_code
+        data_type: string
+      - name: currency_code
+        data_type: string
+        data_tests: [not_null]
+      - name: previous_exchange_code
+        data_type: string
+      - name: exchange_code
+        data_type: string
+        data_tests: [not_null]
+      - name: changed_columns
+        data_type: string
+        data_tests: [not_null]
+
+  - name: gold_instruments
+    description: Current Silver instruments enriched with exchange region and calendar data.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: instrument_id
+        data_type: int64
+        data_tests: [not_null, unique]
+      - name: instrument_name
+        data_type: string
+        data_tests: [not_null]
+      - name: currency_code
+        data_type: string
+        data_tests: [not_null]
+      - name: exchange_code
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('exchanges')
+                field: exchange_code
+      - name: market_region
+        data_type: string
+        data_tests: [not_null]
+      - name: trading_calendar
+        data_type: string
+        data_tests: [not_null]
+      - name: current_since
+        data_type: timestamp
+        data_tests: [not_null]

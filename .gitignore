@@ -3,4 +3,7 @@ __pycache__/
 *.py[cod]
 data/
 dbt-workshop/profiles.yml
+dbt-workshop/.user.yml
+dbt-workshop/logs/
+dbt-workshop/target/
 .idea

@@ -2,7 +2,7 @@
 
     {% set raw_bucket = var('raw_bucket') %}
 
-    {% if not raw_bucket or raw_bucket == 'YOUR_WORKSHOP_DATA_BUCKET' %}
+    {% if not raw_bucket or raw_bucket == 'REPLACE_ME' %}
         {{ exceptions.raise_compiler_error("Set vars.raw_bucket in dbt_project.yml") }}
     {% endif %}
 

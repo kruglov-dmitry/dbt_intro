@@ -43,15 +43,32 @@ The macro creates `instrument_revisions_external` over:
 gs://<raw_bucket>/instrument_revisions/dt=YYYY-MM-DD/data.parquet
 ```
 
-## Create a static table with csv content
+## Create a couple of views on top of external table 
 
 ```bash
 dbt select --select bronze_instruments_qualified
 dbt build --select bronze_instruments_qualified
 dbt select --select bronze_instruments_quarantine
 dbt build --select bronze_instruments_quarantine
+```
 
-dbt seed
+## Build an incremental SCD2 history and diff between versions
+
+```bash
+dbt run --select silver_instrument_history
+dbt build --select silver_instrument_history
+dbt run --select silver_instrument_changes
+dbt build --select silver_instrument_changes
+```
+
+## Create a static table with csv content
+```bash
+dbt seed --select gold_instruments
+```
+
+## Finally create a gold table
+```bash
+dbt build --select exchanges
 ```
 
 ## Task is to build full bronze/golden/layer views/table
@@ -59,16 +76,14 @@ dbt seed
 The resulting lineage is:
 
 ```text
-raw.instrument_revisions (external table)
-  → bronze_instrument_revisions (view)
-  → silver_instrument_history (incremental SCD2 table)
-  → silver_instrument_changes (view)
-  → gold_current_instruments (table)
+raw.instruments (external table)
+  → bronze_instruments (view)
+  → silver_instruments_history (incremental SCD2 table)
+  → silver_instruments_changes (view)
+  → gold_instruments (table)
 ```
 
-`bronze_rejected_instrument_revisions` is a parallel Bronze audit view. It shows
-the deliberately malformed source record and its rejection reason; the valid
-Bronze view feeds Silver.
+`bronze_instrument_quarantine` - contain rows that break data contracts
 
 ## What to inspect
 
@@ -77,19 +92,14 @@ Bronze view feeds Silver.
 select * from bronze_instruments_qualified order by instrument_id, effective_at;
 
 -- The quarantined malformed upstream row
-select * from bronze_rejected_instrument_revisions;
+select * from bronze_instrument_quarantine;
 
 -- SCD2 validity ranges and the current record
-select * from silver_instrument_history order by instrument_id, valid_from;
+select * from silver_instruments_history order by instrument_id, valid_from;
 
 -- Exactly which attributes changed between SCD2 versions
-select * from silver_instrument_changes order by instrument_id, changed_at;
+select * from silver_instruments_changes order by instrument_id, changed_at;
 
 -- Current records enriched from the exchange seed
-select * from gold_current_instruments order by instrument_id;
+select * from gold_instruments order by instrument_id;
 ```
-
-Every model has an enforced dbt contract. Bronze and the Silver diff stay views:
-their contracts preflight all output names and data types, while dbt data tests
-validate nullability and business rules. The Silver SCD2 model uses an
-incremental merge table with `on_schema_change: fail`.
