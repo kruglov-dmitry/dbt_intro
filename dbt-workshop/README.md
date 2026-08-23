@@ -69,7 +69,7 @@ Bronze view feeds Silver.
 
 ```sql
 -- Type enforcement and column-name normalization
-select * from bronze_instrument_revisions order by instrument_id, revision_id;
+select * from bronze_instruments_qualified order by instrument_id, effective_at;
 
 -- The quarantined malformed upstream row
 select * from bronze_rejected_instrument_revisions;

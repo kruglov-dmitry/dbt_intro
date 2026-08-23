@@ -2,7 +2,7 @@
 
 PYTHON ?= python3
 UV ?= uv
-OUTPUT_DIR ?= data/instrument_revisions
+OUTPUT_DIR ?= data/instruments
 START_DATE ?=
 DAYS ?= 5
 ROWS_PER_DAY ?= 5

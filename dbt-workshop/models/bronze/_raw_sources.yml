@@ -5,8 +5,8 @@ sources:
     description: External table over data in GCS
     schema: "{{ target.schema }}"
     tables:
-      - name: instrument_revisions
-        identifier: instrument_revisions_external
+      - name: instruments
+        identifier: instruments_external
         description: >
           Some very useful comments
 #        columns:

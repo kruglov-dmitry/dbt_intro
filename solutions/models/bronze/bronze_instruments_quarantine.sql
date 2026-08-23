@@ -7,7 +7,6 @@ WITH parsed AS (
         currencyCode AS raw_currency_code,
         exchangeCode AS raw_exchange_code,
         effectiveAt AS raw_effective_at,
-        revisionId AS raw_revision_id,
         sourceUpdatedAt AS raw_source_updated_at,
         dt AS load_date,
         SAFE_CAST(NULLIF(TRIM(instrumentId), '') AS INT64) AS instrument_id,
@@ -15,10 +14,9 @@ WITH parsed AS (
         NULLIF(TRIM(currencyCode), '') AS currency_code,
         NULLIF(TRIM(exchangeCode), '') AS exchange_code,
         SAFE_CAST(NULLIF(TRIM(effectiveAt), '') AS TIMESTAMP) AS effective_at,
-        SAFE_CAST(NULLIF(TRIM(revisionId), '') AS INT64) AS revision_id,
         SAFE_CAST(NULLIF(TRIM(sourceUpdatedAt), '') AS TIMESTAMP)
             AS source_updated_at
-    FROM {{ source('raw', 'instrument_revisions') }}
+    FROM {{ source('raw', 'instruments') }}
 )
 
 SELECT
@@ -27,7 +25,6 @@ SELECT
     raw_currency_code,
     raw_exchange_code,
     raw_effective_at,
-    raw_revision_id,
     raw_source_updated_at,
     load_date,
     CASE
@@ -36,7 +33,6 @@ SELECT
         WHEN currency_code IS NULL THEN 'currencyCode is blank'
         WHEN exchange_code IS NULL THEN 'exchangeCode is blank'
         WHEN effective_at IS NULL THEN 'effectiveAt cannot be cast to TIMESTAMP'
-        WHEN revision_id IS NULL THEN 'revisionId cannot be cast to INT64'
         WHEN
             source_updated_at IS NULL
             THEN 'sourceUpdatedAt cannot be cast to TIMESTAMP'
@@ -48,5 +44,4 @@ WHERE
     OR currency_code IS NULL
     OR exchange_code IS NULL
     OR effective_at IS NULL
-    OR revision_id IS NULL
     OR source_updated_at IS NULL

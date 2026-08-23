@@ -4,4 +4,4 @@ SELECT
     *
 -- TODO: Tag every invalid raw records by errors reason
 FROM
-    {{ source('raw', 'instrument_revisions') }}
+    {{ source('raw', 'instruments') }}

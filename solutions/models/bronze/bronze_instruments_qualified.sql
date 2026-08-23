@@ -8,10 +8,9 @@ WITH parsed AS (
         UPPER(NULLIF(TRIM(currencyCode), '')) AS currency_code,
         UPPER(NULLIF(TRIM(exchangeCode), '')) AS exchange_code,
         SAFE_CAST(NULLIF(TRIM(effectiveAt), '') AS TIMESTAMP) AS effective_at,
-        SAFE_CAST(NULLIF(TRIM(revisionId), '') AS INT64) AS revision_id,
         SAFE_CAST(NULLIF(TRIM(sourceUpdatedAt), '') AS TIMESTAMP)
             AS source_updated_at
-    FROM {{ source('raw', 'instrument_revisions') }}
+    FROM {{ source('raw', 'instruments') }}
 ),
 
 validated AS (
@@ -27,7 +26,6 @@ validated AS (
             WHEN
                 effective_at IS NULL
                 THEN 'effectiveAt cannot be cast to TIMESTAMP'
-            WHEN revision_id IS NULL THEN 'revisionId cannot be cast to INT64'
             WHEN
                 source_updated_at IS NULL
                 THEN 'sourceUpdatedAt cannot be cast to TIMESTAMP'
@@ -41,7 +39,6 @@ SELECT
     currency_code,
     exchange_code,
     effective_at,
-    revision_id,
     source_updated_at,
     load_date
 FROM validated
