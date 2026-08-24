@@ -73,7 +73,7 @@ models:
         data_type: string
         data_tests: [not_null]
 
-  - name: silver_instrument_history
+  - name: silver_instruments_history
     description: Incremental SCD2 history around instrument_id derived from valid Bronze records.
     config:
       contract:
@@ -113,7 +113,7 @@ models:
         data_type: date
         data_tests: [not_null]
 
-  - name: silver_instrument_changes
+  - name: silver_instruments_changes
     description: Consumer-facing before-and-after diffs for every changed SCD2 version.
     config:
       contract:

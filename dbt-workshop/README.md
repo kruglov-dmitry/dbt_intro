@@ -43,6 +43,11 @@ The macro creates `instrument_revisions_external` over:
 gs://<raw_bucket>/instrument_revisions/dt=YYYY-MM-DD/data.parquet
 ```
 
+## Create a static table with csv content
+```bash
+dbt seed --select exchanges
+```
+
 ## Create a couple of views on top of external table 
 
 ```bash
@@ -61,14 +66,9 @@ dbt run --select silver_instrument_changes
 dbt build --select silver_instrument_changes
 ```
 
-## Create a static table with csv content
-```bash
-dbt seed --select gold_instruments
-```
-
 ## Finally create a gold table
 ```bash
-dbt build --select exchanges
+dbt build --select gold_instruments
 ```
 
 ## Task is to build full bronze/golden/layer views/table
@@ -77,13 +77,13 @@ The resulting lineage is:
 
 ```text
 raw.instruments (external table)
-  → bronze_instruments (view)
+  → bronze_instruments_qualified (view)
   → silver_instruments_history (incremental SCD2 table)
-  → silver_instruments_changes (view)
+  → silver_instrument_changes (view)
   → gold_instruments (table)
 ```
 
-`bronze_instrument_quarantine` - contain rows that break data contracts
+`bronze_instruments_quarantine` - contain rows that break data contracts
 
 ## What to inspect
 
