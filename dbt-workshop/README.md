@@ -103,3 +103,31 @@ select * from silver_instruments_changes order by instrument_id, changed_at;
 -- Current records enriched from the exchange seed
 select * from gold_instruments order by instrument_id;
 ```
+
+## Check source freshness
+
+The `raw.instruments` source measures freshness from its Hive `dt` partition,
+which is the date the data arrived. It warns after two days and fails after
+seven; this intentionally measures arrival freshness, not the business-effective
+`effectiveAt` timestamp.
+
+```bash
+dbt source freshness --select source:raw.instruments
+```
+
+dbt writes the status to `target/sources.json`. Generate partitions that end near
+the current date for a passing workshop demonstration. For a stale-data failure,
+run the same command against an older latest partition.
+
+## Manual SCD2 or dbt snapshot?
+
+| Use the manual Silver model when… | Use a dbt snapshot when… |
+|---|---|
+| Business-effective history matters, including late-arriving corrections. | You need an audit trail of a mutable source table and only care when dbt observed each change. |
+| You need explicit `scd_version`, validity ranges, a diff view, and custom incremental reprocessing. | The source has a reliable `updated_at` field or a small set of attributes to monitor with the built-in timestamp/check strategy. |
+| You accept more SQL and tests in return for full control. | You want the simplest maintained history with dbt-managed validity columns. |
+
+Snapshots do not automatically create a consumer-facing diff view, and their
+validity timestamps reflect snapshot processing rather than an earlier
+business-effective timestamp supplied in a late record. This workshop therefore
+uses the manual SCD2 model.

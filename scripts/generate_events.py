@@ -28,6 +28,7 @@ INSTRUMENTS = (
 DEFAULT_START_DATE = (date.today() - timedelta(days=10)).isoformat()
 DEFAULT_DAYS = 5
 DEFAULT_ROWS_PER_DAY = len(INSTRUMENTS)
+DEFECT_KINDS = frozenset({"unsupported-code", "duplicate", "blank-required"})
 
 
 def parse_date(value: str) -> date:
@@ -35,6 +36,40 @@ def parse_date(value: str) -> date:
         return date.fromisoformat(value)
     except ValueError as error:
         raise typer.BadParameter("Expected an ISO date, e.g. 2026-08-18") from error
+
+
+def parse_defects(
+    values: list[str], partition_start: date, days: int
+) -> dict[date, set[str]]:
+    """Validate repeated DATE:KIND options and group them by partition date."""
+    partition_end = partition_start + timedelta(days=days - 1)
+    defects: dict[date, set[str]] = {}
+
+    for value in values:
+        date_text, separator, kind = value.partition(":")
+        if not separator:
+            raise typer.BadParameter(
+                "Expected DATE:KIND, e.g. 2026-08-15:duplicate.",
+                param_hint="--defect",
+            )
+
+        defect_date = parse_date(date_text)
+        if kind not in DEFECT_KINDS:
+            allowed_kinds = ", ".join(sorted(DEFECT_KINDS))
+            raise typer.BadParameter(
+                f"Unknown defect kind '{kind}'. Choose one of: {allowed_kinds}.",
+                param_hint="--defect",
+            )
+        if not partition_start <= defect_date <= partition_end:
+            raise typer.BadParameter(
+                "Defect date must be within "
+                f"{partition_start} through {partition_end}.",
+                param_hint="--defect",
+            )
+
+        defects.setdefault(defect_date, set()).add(kind)
+
+    return defects
 
 
 def state_for_change(
@@ -52,7 +87,9 @@ def state_for_change(
     return name, currency, exchange
 
 
-def rows_for_day(day: date, rows_per_day: int, offset: int) -> list[dict[str, str]]:
+def rows_for_day(
+    day: date, rows_per_day: int, offset: int, defects: set[str]
+) -> list[dict[str, str]]:
     """Create an upstream-style instrument change batch for one partition."""
     day_start = datetime.combine(day, time(hour=10), tzinfo=timezone.utc)
     rows: list[dict[str, str]] = []
@@ -75,15 +112,38 @@ def rows_for_day(day: date, rows_per_day: int, offset: int) -> list[dict[str, st
             }
         )
 
-    if offset == 2:
+    if "unsupported-code" in defects:
         rows.append(
             {
-                "instrumentId": "not-an-integer",
-                "instrumentName": "Malformed input",
+                "instrumentId": " 9001 ",
+                "instrumentName": " Unsupported market instrument ",
+                "currencyCode": "zzz",
+                "exchangeCode": "xbad",
+                "effectiveAt": (day_start + timedelta(minutes=45))
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "sourceUpdatedAt": (day_start + timedelta(minutes=50))
+                .isoformat()
+                .replace("+00:00", "Z"),
+            }
+        )
+
+    if "duplicate" in defects:
+        rows.append(rows[0].copy())
+
+    if "blank-required" in defects:
+        rows.append(
+            {
+                "instrumentId": " 9002 ",
+                "instrumentName": " ",
                 "currencyCode": "usd",
                 "exchangeCode": "xnas",
-                "effectiveAt": "not-a-timestamp",
-                "sourceUpdatedAt": day_start.isoformat().replace("+00:00", "Z"),
+                "effectiveAt": (day_start + timedelta(minutes=46))
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "sourceUpdatedAt": (day_start + timedelta(minutes=51))
+                .isoformat()
+                .replace("+00:00", "Z"),
             }
         )
 
@@ -141,6 +201,16 @@ def generate(
         int,
         typer.Option(help="Retained for CLI compatibility; fixture values are fixed."),
     ] = 42,
+    defect: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--defect",
+            help=(
+                "Add DATE:KIND defect; repeat as needed. KIND is unsupported-code, "
+                "duplicate, or blank-required."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Generate deterministic instrument change Parquet files."""
     partition_start = parse_date(start_date)
@@ -155,10 +225,16 @@ def generate(
             param_hint="--rows-per-day",
         )
     del seed
+    defects_by_date = parse_defects(defect or [], partition_start, days)
 
     for offset in range(days):
         partition_date = partition_start + timedelta(days=offset)
-        rows = rows_for_day(partition_date, rows_per_day, offset)
+        rows = rows_for_day(
+            partition_date,
+            rows_per_day,
+            offset,
+            defects_by_date.get(partition_date, set()),
+        )
         output_file = write_partition(output_dir, partition_date, rows)
         typer.echo(f"Wrote {len(rows)} rows to {output_file}")
 
