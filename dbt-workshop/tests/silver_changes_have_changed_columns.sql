@@ -1,3 +1,3 @@
 SELECT *
-FROM {{ ref('silver_instrument_changes') }}
+FROM {{ ref('silver_instruments_changes') }}
 WHERE changed_columns = ''

@@ -8,7 +8,7 @@ WITH history_with_previous AS (
         LAG(instrument_name) OVER version_order AS previous_instrument_name,
         LAG(currency_code) OVER version_order AS previous_currency_code,
         LAG(exchange_code) OVER version_order AS previous_exchange_code
-    FROM {{ ref('silver_instrument_history') }}
+    FROM {{ ref('silver_instruments_history') }}
     WINDOW version_order AS (PARTITION BY instrument_id ORDER BY valid_from, scd_version)
 )
 

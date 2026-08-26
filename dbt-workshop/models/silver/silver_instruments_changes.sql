@@ -2,4 +2,4 @@
 
 -- TODO: Compare each SCD2 version with its preceding version and list changes.
 select *
-from {{ ref('silver_instrument_history') }}
+from {{ ref('silver_instruments_history') }}
