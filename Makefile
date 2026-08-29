@@ -7,6 +7,7 @@ START_DATE ?=
 DAYS ?= 5
 ROWS_PER_DAY ?= 5
 SEED ?= 42
+DEFECTS ?=
 
 .PHONY: help install generate lint format check clean
 
@@ -16,8 +17,8 @@ help: ## Show available commands.
 install: ## Create/update the environment with runtime and development dependencies.
 	$(UV) sync --all-groups
 
-generate: ## Create Hive-style instrument-revision Parquet partitions.
-	$(UV) run python scripts/generate_events.py --output-dir $(OUTPUT_DIR) $(if $(START_DATE),--start-date $(START_DATE)) --days $(DAYS) --rows-per-day $(ROWS_PER_DAY) --seed $(SEED)
+generate: ## Create Hive-style instrument Parquet partitions; set DEFECTS='DATE:KIND ...'.
+	$(UV) run python scripts/generate_events.py --output-dir $(OUTPUT_DIR) $(if $(START_DATE),--start-date $(START_DATE)) --days $(DAYS) --rows-per-day $(ROWS_PER_DAY) --seed $(SEED) $(foreach defect,$(DEFECTS),--defect $(defect))
 
 format: ## Format Python and TOML files with Ruff.
 	$(UV) run ruff format .
