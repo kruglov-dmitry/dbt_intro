@@ -103,7 +103,6 @@ select * from silver_instruments_changes order by instrument_id, changed_at;
 -- Current records enriched from the exchange seed
 select * from gold_instruments order by instrument_id;
 ```
-
 ## Check source freshness
 
 The `raw.instruments` source measures freshness from its Hive `dt` partition,

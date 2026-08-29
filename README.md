@@ -1,13 +1,22 @@
-# dbt Core + BigQuery medallion workshop
+# Overview
 
-This repository provides deterministic Parquet fixtures and a dbt starter project
-for a Bronze → Silver → Gold workshop. The shared infrastructure is assumed to
-exist already.
+DBT core introduction: key concepts and setup to get started.
 
-```text
-Hive-partitioned Parquet → BigQuery external table → Bronze view
-  → Silver incremental SCD2 history + change view → Gold current-instruments table
+- scripts         - contains helper script to generate data as a parquet files     
+- dbt-workshop    - dbt starter project - example of layout, dedicated [Readme](dbt-workshop/README.md)         
+- solutions       - (not the best) implementation of dbt-models for a workshop  
+
+```mermaid
+flowchart LR
+    A["Hive-partitioned<br/>Parquet"] --> B["BigQuery<br/>External Table"]
+    B --> C["Bronze<br/>View"]
+    C --> D["Silver<br/>Incremental SCD2 History"]
+    D --> E["Silver<br/>Change View"]
+    D --> F["Gold<br/>Current Instruments Table"]
 ```
+
+Below, you can find instructions how to create data and setup a GCP project for workshop.
+If infra in place - go inside dbt-workshop and refer to its readme to get started using dbt for real!
 
 ## Generate source fixtures
 
@@ -43,7 +52,7 @@ bucket prefix:
 ```bash
 gcloud storage cp --recursive \
   data/instruments \
-  gs://YOUR_WORKSHOP_DATA_BUCKET/instruments
+  gs://YOUR_DATA_BUCKET/instruments
 
 ## Add defects by partition date
 
@@ -68,17 +77,49 @@ uv run python scripts/generate_events.py \
 make generate START_DATE=2026-08-13 DAYS=5 \
   DEFECTS='2026-08-15:unsupported-code 2026-08-16:duplicate'
 ```
-```
-
-## Run the participant dbt project
-
-See [the participant instructions](dbt-workshop/README.md). In short: configure
-the profile and `raw_bucket` variable, create the external table, load the seed,
-and run `dbt build`.
 
 ## Local checks
 
 ```bash
 make format
 make check
+```
+
+## Infra
+
+1. Create a GCP Project
+2. setup gcloud cli
+3. enable corresponding services:
+```bash
+export PROJECT_ID="REPLACE_ME"
+gcloud auth login
+gcloud config set project $(PROJECT_ID)
+gcloud services enable bigquery.googleapis.com storage.googleapis.com
+```
+4. create a bucket:
+```bash
+export REGION="europe-west4"
+export BUCKET="${PROJECT_ID}-bucket"
+gcloud storage buckets create "gs://${BUCKET}" \
+  --project="${PROJECT_ID}" \
+  --location="${REGION}" \
+  --uniform-bucket-level-access
+```
+5. copy there generated data:
+```bash
+gcloud storage cp --recursive \
+  data/instruments/dt=2026-08-1* \
+  "gs://${BUCKET}/instruments/"
+```
+6. Create a new google group at [https://groups.google.com](https://groups.google.com)
+7. Assign permissions for participants:
+```bash
+WORKSHOP_GROUP="REPLACE_ME@googlegroups.com"
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="${WORKSHOP_GROUP}" \
+  --role="roles/bigquery.user"
+
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+  --member="${WORKSHOP_GROUP}" \
+  --role="roles/storage.objectViewer"
 ```
