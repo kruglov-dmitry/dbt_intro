@@ -37,10 +37,10 @@ dbt debug
 dbt run-operation setup_sources
 ```
 
-The macro creates `instrument_revisions_external` over:
+The macro creates `instruments_external` over:
 
 ```text
-gs://<raw_bucket>/instrument_revisions/dt=YYYY-MM-DD/data.parquet
+gs://<raw_bucket>/instruments/dt=YYYY-MM-DD/data.parquet
 ```
 
 ## Create a static table with csv content
@@ -49,27 +49,90 @@ dbt seed --select exchanges
 ```
 
 ## Create a couple of views on top of external table 
+- run - create (or refresh) a model
+- build - create (or refresh) a model and run a tests
 
 ```bash
-dbt select --select bronze_instruments_qualified
+dbt ls --select bronze_instruments_qualified
 dbt build --select bronze_instruments_qualified
-dbt select --select bronze_instruments_quarantine
+dbt ls --select bronze_instruments_quarantine
 dbt build --select bronze_instruments_quarantine
 ```
 
 ## Build an incremental SCD2 history and diff between versions
 
 ```bash
-dbt run --select silver_instrument_history
-dbt build --select silver_instrument_history
-dbt run --select silver_instrument_changes
-dbt build --select silver_instrument_changes
+dbt run --select silver_instruments_history
+dbt build --select silver_instruments_history
+dbt run --select silver_instruments_changes
+dbt build --select silver_instruments_changes
 ```
 
 ## Finally create a gold table
 ```bash
 dbt build --select gold_instruments
 ```
+
+## Targeted builds and tags
+
+After the first full build, use graph selection to rebuild a model with all of
+its upstream dependencies:
+
+```bash
+dbt build --select +gold_instruments
+```
+
+The models are also tagged by layer (`bronze`, `silver`, and `gold`); the
+history model additionally has the `scd2` tag. List a selection before running
+it, then use the same selector for a focused build:
+
+```bash
+dbt ls --select tag:silver
+dbt build --select tag:scd2
+dbt build --select tag:gold
+```
+
+`+gold_instruments` means “the Gold model plus all its parents.” Use
+`gold_instruments+` when you instead want its downstream dependants.
+
+## Demonstrate safe schema changes on Silver
+
+`silver_instruments_history` is incremental and uses
+`on_schema_change: fail`. This makes an unreviewed change to the model's output
+schema fail rather than silently altering the existing history table.
+
+After building the model once, temporarily add a column to the `SELECT` in
+`models/silver/silver_instruments_history.sql`, for example:
+
+```sql
+cast(null as string) as workshop_schema_change_demo
+```
+
+Then run:
+
+```bash
+dbt build --select silver_instruments_history
+```
+
+dbt should stop because the incremental target does not have the new column.
+Remove the demonstration column to restore the original model. In a real
+change, update the model contract deliberately and use a separately reviewed
+migration or a full refresh, rather than weakening this protection.
+
+## Explore the documentation site
+
+Generate the dbt documentation artifacts after a build, then serve them
+locally:
+
+```bash
+dbt docs generate
+dbt docs serve
+```
+
+The site shows model and source descriptions, declared column contracts and
+tests, and the lineage graph from the external source through Bronze, Silver,
+and Gold. The test result status shown in the docs is from the most recent
+`dbt build`.
 
 ## Task is to build full bronze/golden/layer views/table
 
@@ -83,7 +146,7 @@ raw.instruments (external table)
   → gold_instruments (table)
 ```
 
-`bronze_instruments_quarantine` - contain rows that break data contracts
+`bronze_instruments_quarantine` contains rows that break data contracts.
 
 ## What to inspect
 
@@ -91,8 +154,8 @@ raw.instruments (external table)
 -- Type enforcement and column-name normalization
 select * from bronze_instruments_qualified order by instrument_id, effective_at;
 
--- The quarantined malformed upstream row
-select * from bronze_instrument_quarantine;
+-- The quarantined malformed upstream rows
+select * from bronze_instruments_quarantine;
 
 -- SCD2 validity ranges and the current record
 select * from silver_instruments_history order by instrument_id, valid_from;
@@ -101,7 +164,7 @@ select * from silver_instruments_history order by instrument_id, valid_from;
 select * from silver_instruments_changes order by instrument_id, changed_at;
 
 -- Current records enriched from the exchange seed
-select * from gold_instruments order by instrument_id;
+select * from instruments order by instrument_id;
 ```
 ## Check source freshness
 

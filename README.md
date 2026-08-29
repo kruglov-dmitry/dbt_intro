@@ -53,6 +53,7 @@ bucket prefix:
 gcloud storage cp --recursive \
   data/instruments \
   gs://YOUR_DATA_BUCKET/instruments
+```
 
 ## Add defects by partition date
 
@@ -93,7 +94,7 @@ make check
 ```bash
 export PROJECT_ID="REPLACE_ME"
 gcloud auth login
-gcloud config set project $(PROJECT_ID)
+gcloud config set project "${PROJECT_ID}"
 gcloud services enable bigquery.googleapis.com storage.googleapis.com
 ```
 4. create a bucket:
