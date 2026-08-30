@@ -1,22 +1,26 @@
-# Overview
+![How dbt works](dbt_overview.jpg)
 
-DBT core introduction: key concepts and setup to get started.
-
+## Repo overview
 - scripts         - contains helper script to generate data as a parquet files     
 - dbt-workshop    - dbt starter project - example of layout, dedicated [Readme](dbt-workshop/README.md)         
 - solutions       - (not the best) implementation of dbt-models for a workshop  
+
+## What we want to build in workshop
+
+Assume that we have ingestion job that produce nice parquet files into S3.   
+We will explore how to build on top it classical medallion architecture:
 
 ```mermaid
 flowchart LR
     A["Hive-partitioned<br/>Parquet"] --> B["BigQuery<br/>External Table"]
     B --> C["Bronze<br/>View"]
     C --> D["Silver<br/>Incremental SCD2 History"]
-    D --> E["Silver<br/>Change View"]
+    D --> E["Silver<br/>View with changes between revisions"]
     D --> F["Gold<br/>Current Instruments Table"]
 ```
 
-Below, you can find instructions how to create data and setup a GCP project for workshop.
-If infra in place - go inside dbt-workshop and refer to its readme to get started using dbt for real!
+Below, you can find instructions how to create data and setup a GCP project for workshop.    
+If infra in place - go inside dbt-workshop and refer to its [Readme](dbt-workshop/README.md) to get started using dbt for real!
 
 ## Generate source fixtures
 
