@@ -1,13 +1,44 @@
-# Tldr;
+# Overview
 
-Dbt-intro:
-- external table
-- medallion architecture
-- dbt core concepts: macros, seed, models, data contract, incremental SCD2
+We have a parquet files under some bucket at S3.
+They content daily snapshots of attributes per instrument:   
+```
+- instrumentId
+- instrumentName
+- currencyCode
+- exchangeCode
+- effectiveAt
+- sourceUpdatedAt
+```
+We have a csv file under `seeds` folder with exchange details [exchanges.csv](seeds/exchanges.csv)   
 
-This project builds a contracted medallion pipeline over shared Parquet
-instrument revisions. Each participant creates only an external-table definition
-and dbt relations in their own BigQuery dataset.
+We want to create on top of them simple data-warehouse:
+- bronze layer - where we just apply some simple sanitization to data
+- silver layer - to have a history tracking as well view to show diff between revisions
+- golden layer - latest revision per instrument from history, enriched with exchanges data
+
+### Plan
+- repo layout - macros/models/seeds/tests
+- set up a connection dbt -> GCP Project at `profiles.yml`
+- create an external table over parquet file at s3 - query layer on top of our `landing zone` - use a dbt macros
+- load a csv into big query table via dbt seed
+- source.yml - data assets that we use as input but have not too much control over
+- schema.yml - definition of our models - names, schema and simple validations
+- usage of `ref` vs `source`
+- first model execution - lets create view in bronze layer! - `dbt run --select`
+- data contract enforcement - names, types and more
+- silver layer - incremental model - process only new entries, `unique_keys` that should not be null
+- silver layer - tracking diff between revisions
+- gold layer - final table with simple join
+- tests and how to run them
+- navigating DAG: `dbt ls`, tags, using `+` to select upstream or downstream, UI - `dbt docs generate && dbt docs serve`
+
+**NOTE:** models are INTENTIONALLY left not implemented, but solutions are available in the root folder of project - [solutions](../solutions/).   
+If you are in rush - copy files from `../solutions/models` into current `models` folder and run everything `dbt run`.    
+Thats how resulting DAGs should look like:
+
+![Table layout overview](tables_overview.jpg)
+
 
 ## Set up
 
